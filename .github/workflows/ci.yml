@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+# Cancel prior runs of the same branch/PR if a new commit arrives
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 20 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "20"
+          cache: maven
+
+      - name: Make Maven wrapper executable (Linux)
+        run: chmod +x mvnw
+
+      - name: Build & test
+        run: ./mvnw -B -ntp verify
+
+      - name: Upload test reports (optional)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: |
+            **/target/surefire-reports/*.xml
+            **/target/surefire-reports/*.txt
+          if-no-files-found: ignore
+
+  docker-build:
+    # Optional: ensures your Dockerfile builds successfully.
+    # Render will build from your Dockerfile on deploy; this just validates it first.
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Docker build (sanity check)
+        run: docker build -t primenumbers:ci .
